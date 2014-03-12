@@ -105,6 +105,8 @@ public class ItemImport
     private static boolean isQuiet = false;
 
     private static boolean template = false;
+    
+    private static boolean hasEmbargo = false;
 
     private static PrintWriter mapOut = null;
 
@@ -166,6 +168,7 @@ public class ItemImport
             options.addOption("q", "quiet", false, "don't display metadata");
 
             options.addOption("h", "help", false, "help");
+            options.addOption("E", "embargo", false, "read contents file for embargo dates");
 
             CommandLine line = parser.parse(options, argv);
 
@@ -269,6 +272,12 @@ public class ItemImport
             if (line.hasOption('q'))
             {
                 isQuiet = true;
+            }
+            
+            if (line.hasOption('E')) // embargo
+            {
+            	hasEmbargo = true;
+            	System.out.println("Embargo flag set"); // TODO: delete this line
             }
 
             boolean zip = false;
@@ -564,6 +573,7 @@ public class ItemImport
 
                 if ("add".equals(command))
                 {
+                	System.out.println("Calling myloader.addItems from main"); // TODO: delete this line
                     myloader.addItems(c, mycollections, sourcedir, mapfile, template);
                 }
                 else if ("replace".equals(command))
@@ -768,6 +778,8 @@ public class ItemImport
         String[] dircontents = d.list(directoryFilter);
         
         Arrays.sort(dircontents);
+        
+        System.out.println("dircontents length: " + dircontents.length);  // TODO: delete me
 
         for (int i = 0; i < dircontents.length; i++)
         {
@@ -777,6 +789,7 @@ public class ItemImport
             }
             else
             {
+            	System.out.println("Calling addItem from addItems");  // TODO: delete me
                 addItem(c, mycollections, sourceDir, dircontents[i], mapOut, template);
                 System.out.println(i + " " + dircontents[i]);
                 c.clearCache();
@@ -1385,6 +1398,7 @@ public class ItemImport
                         boolean bundleExists = false;
                         boolean permissionsExist = false;
                         boolean descriptionExists = false;
+                        boolean embargoExists = false;
 
                         // look for a bundle name
                         String bundleMarker = "\tbundle:";
@@ -1427,6 +1441,20 @@ public class ItemImport
                             }
                             descriptionExists = true;
                         }
+                        
+                        // look for embargo
+                        String embargoMarker = "\tembargo:";
+                        int eMarkerIndex = line.indexOf(embargoMarker);
+                        int eEndIndex = 0;
+                        if (eMarkerIndex > 0)
+                        {
+                        	eEndIndex = line.indexOf("\t", eMarkerIndex + 1);
+                        	if (eEndIndex == -1)
+                        	{
+                        		eEndIndex = line.length();
+                        	}
+                        	embargoExists = true;
+                        }
 
                         // is this the primary bitstream?
                         String primaryBitstreamMarker = "\tprimary:true";
@@ -1454,7 +1482,7 @@ public class ItemImport
                             System.out.println("\tBitstream: " + bitstreamName + primaryStr);
                         }
 
-                        if (permissionsExist || descriptionExists)
+                        if (permissionsExist || descriptionExists || embargoExists)
                         {
                             String extraInfo = bitstreamName;
 
@@ -1468,6 +1496,12 @@ public class ItemImport
                             {
                                 extraInfo = extraInfo
                                         + line.substring(dMarkerIndex, dEndIndex);
+                            }
+                            
+                            if (embargoExists)
+                            {
+                            	extraInfo = extraInfo
+                            			+ line.substring(eMarkerIndex, eEndIndex);
                             }
 
                             options.add(extraInfo);
@@ -1677,6 +1711,7 @@ public class ItemImport
 
             boolean permissionsExist = false;
             boolean descriptionExists = false;
+            boolean embargoExists = false;
 
             String permissionsMarker = "\tpermissions:";
             int pMarkerIndex = line.indexOf(permissionsMarker);
@@ -1703,6 +1738,21 @@ public class ItemImport
                 }
                 descriptionExists = true;
             }
+            
+            // Do embargo stuff here
+            String embargoMarker = "\tembargo:";
+            int eMarkerIndex = line.indexOf(embargoMarker);
+            int eEndIndex = 0;
+            if (eMarkerIndex > 0)
+            {
+            	eEndIndex = line.indexOf("\t", eMarkerIndex + 1);
+            	if (eEndIndex == -1)
+            	{
+            		eEndIndex = line.length();
+            	}
+            	embargoExists = true;
+            }
+            
 
             int bsEndIndex = line.indexOf("\t");
             String bitstreamName = line.substring(0, bsEndIndex);
@@ -1760,6 +1810,13 @@ public class ItemImport
                 thisDescription = line.substring(
                         dMarkerIndex + descriptionMarker.length(), dEndIndex)
                         .trim();
+            }
+            
+            if (embargoExists)
+            {
+            	// TODO: set the embargo
+            	System.out.println("@@@@@@ Embargo this item until:"); // TODO: delete me
+            	System.out.println("@@@@@@ " + line.substring(dMarkerIndex + embargoMarker.length(), eEndIndex)); // TODO: delete me
             }
 
             Bitstream bs = null;
