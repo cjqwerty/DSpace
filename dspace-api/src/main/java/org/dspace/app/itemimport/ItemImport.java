@@ -1385,6 +1385,7 @@ public class ItemImport
                         boolean bundleExists = false;
                         boolean permissionsExist = false;
                         boolean descriptionExists = false;
+                        boolean embargoExists = false;
 
                         // look for a bundle name
                         String bundleMarker = "\tbundle:";
@@ -1427,6 +1428,25 @@ public class ItemImport
                             }
                             descriptionExists = true;
                         }
+                        
+                        // TODO: remove this for pull request to main branch
+                        // for testing purposes this is its own method
+                        embargoExists = checkForEmbargo(line);
+                        
+                        // repeated code from checkForEmbargo because 
+                        // eMarkerIndex and eEndIndex are needed
+                        String embargoMarker = "\tembargo:";
+                    	int eMarkerIndex = line.indexOf(embargoMarker);
+                    	int eEndIndex = 0;
+                    	if (eMarkerIndex > 0)
+                    	{
+                    		eEndIndex = line.indexOf("\t", eMarkerIndex + 1);
+                    		if (eEndIndex == -1)
+                    		{
+                    			eEndIndex = line.length();
+                    		}
+                    		embargoExists = true;
+                    	}
 
                         // is this the primary bitstream?
                         String primaryBitstreamMarker = "\tprimary:true";
@@ -1454,7 +1474,7 @@ public class ItemImport
                             System.out.println("\tBitstream: " + bitstreamName + primaryStr);
                         }
 
-                        if (permissionsExist || descriptionExists)
+                        if (permissionsExist || descriptionExists || embargoExists)
                         {
                             String extraInfo = bitstreamName;
 
@@ -1468,6 +1488,12 @@ public class ItemImport
                             {
                                 extraInfo = extraInfo
                                         + line.substring(dMarkerIndex, dEndIndex);
+                            }
+                            
+                            if (embargoExists)
+                            {
+                            	extraInfo = extraInfo
+                            			+ line.substring(eMarkerIndex, eEndIndex);
                             }
 
                             options.add(extraInfo);
@@ -1677,6 +1703,7 @@ public class ItemImport
 
             boolean permissionsExist = false;
             boolean descriptionExists = false;
+            boolean embargoExists = false;
 
             String permissionsMarker = "\tpermissions:";
             int pMarkerIndex = line.indexOf(permissionsMarker);
@@ -1703,6 +1730,24 @@ public class ItemImport
                 }
                 descriptionExists = true;
             }
+            
+            // TODO: remove this for pull request to main branch
+            // using checkForEmbargo for testability
+            embargoExists = checkForEmbargo(line);
+            
+            // repeated code from checkForEmbargo
+            String embargoMarker = "\tembargo:";
+        	int eMarkerIndex = line.indexOf(embargoMarker);
+        	int eEndIndex = 0;
+        	if (eMarkerIndex > 0)
+        	{
+        		eEndIndex = line.indexOf("\t", eMarkerIndex + 1);
+        		if (eEndIndex == -1)
+        		{
+        			eEndIndex = line.length();
+        		}
+        		embargoExists = true;
+        	}
 
             int bsEndIndex = line.indexOf("\t");
             String bitstreamName = line.substring(0, bsEndIndex);
@@ -1760,6 +1805,15 @@ public class ItemImport
                 thisDescription = line.substring(
                         dMarkerIndex + descriptionMarker.length(), dEndIndex)
                         .trim();
+            }
+            
+            if (embargoExists)
+            {
+            	// TODO: this is probably where we parse the date
+            	// I think inside the "else if (!isTest)" on line 1842-ish we should do the AuthorizeManager stuff
+            	String embargoDate = parseEmbargoDate(line, eMarkerIndex + embargoMarker.length(), eEndIndex);
+            	System.out.println("@@@@@@ Embargo this item until:");
+            	System.out.println("@@@@@@ " + embargoDate);
             }
 
             Bitstream bs = null;
@@ -2139,5 +2193,47 @@ public class ItemImport
         {
             log.warn("error during item export error notification", e);
         }
+    }
+    
+    /**
+     * Checks if the current line contains an embargo
+     * 
+     * @param line
+     * 			  - The current line
+     * @return True if the current line contains an embargo, false otherwise
+     */
+    public boolean checkForEmbargo(String line)
+    {
+    	String embargoMarker = "\tembargo:";
+    	int eMarkerIndex = line.indexOf(embargoMarker);
+    	int eEndIndex = 0;
+    	if (eMarkerIndex > 0)
+    	{
+    		eEndIndex = line.indexOf("\t", eMarkerIndex + 1);
+    		if (eEndIndex == -1)
+    		{
+    			eEndIndex = line.length();
+    		}
+    		
+    		return true;
+    	}
+    	
+    	return false;
+    }
+    
+    /**
+     * Parses the current line for the embargo date
+     * 
+     * @param line
+     *            - The current line 		
+     * @param start
+     *            - The start index
+     * @param end
+     *            - The end index
+     * @return The embargo date
+     */
+    public String parseEmbargoDate(String line, int start, int end)
+    {
+    	return line.substring(start, end);
     }
 }
