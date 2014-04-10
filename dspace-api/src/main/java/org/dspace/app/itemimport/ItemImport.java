@@ -1430,23 +1430,12 @@ public class ItemImport
                         }
                         
                         // TODO: remove this for pull request to main branch
-                        // for testing purposes this is its own method
-                        embargoExists = checkForEmbargo(line);
-                        
-                        // repeated code from checkForEmbargo because 
-                        // eMarkerIndex and eEndIndex are needed
-                        String embargoMarker = "\tembargo:";
-                    	int eMarkerIndex = line.indexOf(embargoMarker);
-                    	int eEndIndex = 0;
-                    	if (eMarkerIndex > 0)
-                    	{
-                    		eEndIndex = line.indexOf("\t", eMarkerIndex + 1);
-                    		if (eEndIndex == -1)
-                    		{
-                    			eEndIndex = line.length();
-                    		}
-                    		embargoExists = true;
-                    	}
+                        // replace with code similar to permission/descriptions
+                        // parsing
+                        EmbargoHelper embargoHelper = new EmbargoHelper(line);
+                        embargoExists = embargoHelper.checkForEmbargo();
+                        int eMarkerIndex = embargoHelper.getEMarkerIndex();
+                        int eEndIndex = embargoHelper.getEEndIndex();
 
                         // is this the primary bitstream?
                         String primaryBitstreamMarker = "\tprimary:true";
@@ -1732,22 +1721,9 @@ public class ItemImport
             }
             
             // TODO: remove this for pull request to main branch
-            // using checkForEmbargo for testability
-            embargoExists = checkForEmbargo(line);
-            
-            // repeated code from checkForEmbargo
-            String embargoMarker = "\tembargo:";
-        	int eMarkerIndex = line.indexOf(embargoMarker);
-        	int eEndIndex = 0;
-        	if (eMarkerIndex > 0)
-        	{
-        		eEndIndex = line.indexOf("\t", eMarkerIndex + 1);
-        		if (eEndIndex == -1)
-        		{
-        			eEndIndex = line.length();
-        		}
-        		embargoExists = true;
-        	}
+            // replace with code similar to permission/descriptions parsing
+            EmbargoHelper embargoHelper = new EmbargoHelper(line);
+            embargoExists = embargoHelper.checkForEmbargo();
 
             int bsEndIndex = line.indexOf("\t");
             String bitstreamName = line.substring(0, bsEndIndex);
@@ -1810,10 +1786,10 @@ public class ItemImport
             if (embargoExists)
             {
             	// TODO: this is probably where we parse the date
-            	// I think inside the "else if (!isTest)" on line 1842-ish we should do the AuthorizeManager stuff
-            	String embargoDate = parseEmbargoDate(line, eMarkerIndex + embargoMarker.length(), eEndIndex);
+                // I think inside the "else if (!isTest)"
+                System.out.println("@@@@@@ Using EmbargoHelper");
             	System.out.println("@@@@@@ Embargo this item until:");
-            	System.out.println("@@@@@@ " + embargoDate);
+                System.out.println("@@@@@@ " + embargoHelper.getEmbargoDate());
             }
 
             Bitstream bs = null;
@@ -2193,47 +2169,5 @@ public class ItemImport
         {
             log.warn("error during item export error notification", e);
         }
-    }
-    
-    /**
-     * Checks if the current line contains an embargo
-     * 
-     * @param line
-     * 			  - The current line
-     * @return True if the current line contains an embargo, false otherwise
-     */
-    public boolean checkForEmbargo(String line)
-    {
-    	String embargoMarker = "\tembargo:";
-    	int eMarkerIndex = line.indexOf(embargoMarker);
-    	int eEndIndex = 0;
-    	if (eMarkerIndex > 0)
-    	{
-    		eEndIndex = line.indexOf("\t", eMarkerIndex + 1);
-    		if (eEndIndex == -1)
-    		{
-    			eEndIndex = line.length();
-    		}
-    		
-    		return true;
-    	}
-    	
-    	return false;
-    }
-    
-    /**
-     * Parses the current line for the embargo date
-     * 
-     * @param line
-     *            - The current line 		
-     * @param start
-     *            - The start index
-     * @param end
-     *            - The end index
-     * @return The embargo date
-     */
-    public String parseEmbargoDate(String line, int start, int end)
-    {
-    	return line.substring(start, end);
     }
 }
