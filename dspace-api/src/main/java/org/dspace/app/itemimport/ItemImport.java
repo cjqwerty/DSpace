@@ -1607,7 +1607,7 @@ public class ItemImport
      * @throws AuthorizeException
      */
     private void registerBitstream(Context c, Item i, int assetstore, 
-            String bitstreamPath, String bundleName, String description )
+            String bitstreamPath, String bundleName, String description)
         	throws SQLException, IOException, AuthorizeException
     {
         // TODO validate assetstore number
@@ -1783,15 +1783,6 @@ public class ItemImport
                         .trim();
             }
             
-            if (embargoExists)
-            {
-            	// TODO: this is probably where we parse the date
-                // I think inside the "else if (!isTest)"
-                System.out.println("@@@@@@ Using EmbargoHelper");
-            	System.out.println("@@@@@@ Embargo this item until:");
-                System.out.println("@@@@@@ " + embargoHelper.getEmbargoDate());
-            }
-
             Bitstream bs = null;
             boolean notfound = true;
             if (!isTest)
@@ -1843,6 +1834,18 @@ public class ItemImport
                     bs.setDescription(thisDescription);
                     bs.update();
                 }
+                
+                if(embargoExists) 
+                {
+                	System.out.println("@@@@@@ Using EmbargoHelper");
+                	System.out.println("@@@@@@ Embargo this item until:");                    
+                    Date embargoDate = embargoHelper.getEmbargoDate();
+                    
+                    if(embargoDate!=null) {
+                    	System.out.println("@@@@@@ " + embargoDate.toString());
+                    	setEmbargo(c,embargoDate,bs);
+                    }              
+                }
             }
         }
     }
@@ -1886,6 +1889,39 @@ public class ItemImport
             }
         }
 
+    }
+    
+    /**
+     * Sets the embargo date on a bitstream
+     * @param c
+     * @param embargoDate
+     * @param bs
+     * 
+     */
+    private void setEmbargo(Context c, Date embargoDate, Bitstream bs)
+            throws SQLException, AuthorizeException {
+    	if(embargoDate!=null) {
+    		if(!isTest) {
+    			AuthorizeManager.authorizeAction(c, bs, Constants.READ);
+    			if(!AuthorizeManager.isAnIdenticalPolicyAlreadyInPlace(c, bs.getType(), bs.getID(), 0, Constants.READ, -1)) {
+    				ResourcePolicy rp = ResourcePolicy.create(c);
+                    rp.setResource(bs);
+                    rp.setAction(Constants.READ);
+                    rp.setRpName("Embargo Policy");
+                    rp.setRpType(ResourcePolicy.TYPE_CUSTOM);
+                    rp.setRpDescription("Document is embargoed until "+embargoDate.toString());
+                    Group policyGroup = Group.find(c, 0);
+                    rp.setGroup(policyGroup);
+                    rp.setStartDate(embargoDate);
+                    
+        			rp.update();
+        			bs.updateLastModified();
+    			}    			
+        	}
+        	else {
+        		System.out.println("Call the createOrModifyPolicy of AuthorizeManager class to set embargo resource policy on the given bitsream");
+        	}
+    	}    	
     }
 
     // XML utility methods

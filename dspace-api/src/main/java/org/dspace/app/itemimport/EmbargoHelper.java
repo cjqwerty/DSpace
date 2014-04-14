@@ -1,5 +1,8 @@
 package org.dspace.app.itemimport;
 
+import java.util.Date;
+import org.dspace.core.Utils;
+
 /**
  * Contains utility functions to help parse the content file for embargos. Was
  * refactored into this class to clean up code and make unit testing easier.
@@ -50,17 +53,17 @@ public class EmbargoHelper
     /**
      * @return The date to embargo until
      */
-    public String getEmbargoDate()
+    public Date getEmbargoDate()
     {
         String embargoDate = "";
 
         if (embargoExists)
         {
             embargoDate = line.substring(eMarkerIndex + embargoMarker.length(),
-                    eEndIndex);
+                    eEndIndex).trim();
         }
 
-        return embargoDate;
+        return Utils.parseISO8601Date(embargoDate);
     }
 
     /**
