@@ -1,7 +1,8 @@
 package org.dspace.app.itemimport;
 
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.Date;
-import org.dspace.core.Utils;
 
 /**
  * Contains utility functions to help parse the content file for embargos. Was
@@ -53,7 +54,7 @@ public class EmbargoHelper
     /**
      * @return The date to embargo until
      */
-    public Date getEmbargoDate()
+    public Date getEmbargoDate() throws ParseException
     {
         String embargoDate = "";
 
@@ -62,8 +63,10 @@ public class EmbargoHelper
             embargoDate = line.substring(eMarkerIndex + embargoMarker.length(),
                     eEndIndex).trim();
         }
+        
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 
-        return Utils.parseISO8601Date(embargoDate);
+        return sdf.parse(embargoDate);
     }
 
     /**

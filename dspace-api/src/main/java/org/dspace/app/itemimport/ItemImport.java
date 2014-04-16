@@ -17,6 +17,7 @@ import gr.ekt.bteio.loaders.OAIPMHDataLoader;
 
 import java.io.*;
 import java.sql.SQLException;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.zip.ZipFile;
@@ -1835,15 +1836,26 @@ public class ItemImport
                     bs.update();
                 }
                 
-                if(embargoExists) 
+                if (embargoExists)
                 {
                 	System.out.println("@@@@@@ Using EmbargoHelper");
-                	System.out.println("@@@@@@ Embargo this item until:");                    
-                    Date embargoDate = embargoHelper.getEmbargoDate();
+                    System.out.println("@@@@@@ Embargo this item until:");
+
+                    Date embargoDate = null;
+
+                    try
+                    {
+                        embargoDate = embargoHelper.getEmbargoDate();
+                    }
+                    catch (ParseException e)
+                    {
+                        e.printStackTrace();
+                    }
                     
-                    if(embargoDate!=null) {
+                    if (embargoDate != null)
+                    {
                     	System.out.println("@@@@@@ " + embargoDate.toString());
-                    	setEmbargo(c,embargoDate,bs);
+                        setEmbargo(c, embargoDate, bs);
                     }              
                 }
             }
@@ -1899,27 +1911,35 @@ public class ItemImport
      * 
      */
     private void setEmbargo(Context c, Date embargoDate, Bitstream bs)
-            throws SQLException, AuthorizeException {
-    	if(embargoDate!=null) {
-    		if(!isTest) {
-    			AuthorizeManager.authorizeAction(c, bs, Constants.READ);
-    			if(!AuthorizeManager.isAnIdenticalPolicyAlreadyInPlace(c, bs.getType(), bs.getID(), 0, Constants.READ, -1)) {
-    				ResourcePolicy rp = ResourcePolicy.create(c);
+            throws SQLException, AuthorizeException
+    {
+        if (embargoDate != null)
+        {
+            if (!isTest)
+            {
+                AuthorizeManager.authorizeAction(c, bs, Constants.READ);
+                if (!AuthorizeManager.isAnIdenticalPolicyAlreadyInPlace(c,
+                        bs.getType(), bs.getID(), 0, Constants.READ, -1))
+                {
+                    ResourcePolicy rp = ResourcePolicy.create(c);
                     rp.setResource(bs);
                     rp.setAction(Constants.READ);
                     rp.setRpName("Embargo Policy");
                     rp.setRpType(ResourcePolicy.TYPE_CUSTOM);
-                    rp.setRpDescription("Document is embargoed until "+embargoDate.toString());
+                    rp.setRpDescription("Document is embargoed until "
+                            + embargoDate.toString());
                     Group policyGroup = Group.find(c, 0);
                     rp.setGroup(policyGroup);
                     rp.setStartDate(embargoDate);
                     
         			rp.update();
-        			bs.updateLastModified();
+                    bs.updateLastModified();
     			}    			
-        	}
-        	else {
-        		System.out.println("Call the createOrModifyPolicy of AuthorizeManager class to set embargo resource policy on the given bitsream");
+            }
+            else
+            {
+                System.out
+                        .println("Call the createOrModifyPolicy of AuthorizeManager class to set embargo resource policy on the given bitsream");
         	}
     	}    	
     }
