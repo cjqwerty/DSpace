@@ -108,6 +108,8 @@ public class ItemImport
     private static boolean template = false;
 
     private static PrintWriter mapOut = null;
+    
+    private static String groupName = null; // group name to which item embargo is applied
 
     // File listing filter to look for metadata files
     private static FilenameFilter metadataFileFilter = new FilenameFilter()
@@ -165,8 +167,8 @@ public class ItemImport
             options.addOption("R", "resume", false,
                     "resume a failed import (add only)");
             options.addOption("q", "quiet", false, "don't display metadata");
-
             options.addOption("h", "help", false, "help");
+            options.addOption("g","embargo group name",false,"applies item embargo against specified group name");
 
             CommandLine line = parser.parse(options, argv);
 
@@ -176,7 +178,7 @@ public class ItemImport
             String mapfile = null;
             String eperson = null; // db ID or email
             String[] collections = null; // db ID or handles
-
+            
             if (line.hasOption('h'))
             {
                 HelpFormatter myhelp = new HelpFormatter();
@@ -191,6 +193,7 @@ public class ItemImport
                         .println("deleting items:  ItemImport -d -e eperson -m mapfile");
                 System.out
                         .println("If multiple collections are specified, the first collection will be the one that owns the item.");
+                System.out.println("AAAAAA");
 
                 System.exit(0);
             }
@@ -270,6 +273,16 @@ public class ItemImport
             if (line.hasOption('q'))
             {
                 isQuiet = true;
+            }
+            
+            if(line.hasOption('g')) // group name
+            {
+            	groupName = line.getOptionValue('g');
+            	groupName = groupName.trim();
+            	if(groupName==null || groupName.isEmpty()) {
+            		System.out.println("Error : Cannot resolve specified group name");
+            		System.exit(1);
+            	}
             }
 
             boolean zip = false;
@@ -983,6 +996,33 @@ public class ItemImport
         {
             mapOut.println(mapOutput);
         }
+        
+        // Set embargo for the current item
+        if(!isTest) {
+        	File itemEmbargoDateFile = new File(path + File.separatorChar + itemname + File.separatorChar + "embargo_date.txt");
+        	if(itemEmbargoDateFile.exists()) {
+        		BufferedReader br = new BufferedReader(new FileReader(itemEmbargoDateFile));
+        		SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+        		String temp;
+        		Date itemEmbargoDate = null;
+        		while((temp = br.readLine())!=null) {
+        			temp = temp.trim();
+        			if(!temp.isEmpty()) {
+        				itemEmbargoDate = sdf.parse(temp);
+        				break;
+        			}
+        		}
+        		br.close();
+        		if(itemEmbargoDate!=null)
+        			setEmbargo(c, itemEmbargoDate, groupName, myitem);
+        		else {
+        			System.out.println("Error : Item embargo date given is not valid");
+        			System.exit(1);
+        		}
+        	}        	
+        }
+        else
+        	System.out.println("Call set embargo method on current item");
 
         c.commit();
 
@@ -1456,7 +1496,7 @@ public class ItemImport
                             processContentFileEntry(c, i, path, bitstreamName, bundleName, primary);
                             System.out.println("\tBitstream: " + bitstreamName +
                                                "\tBundle: " + bundleName +
-                                               primaryStr);
+                                               primaryStr);       
                         }
                         else
                         {
@@ -1855,7 +1895,7 @@ public class ItemImport
                     if (embargoDate != null)
                     {
                     	System.out.println("@@@@@@ " + embargoDate.toString());
-                        setEmbargo(c, embargoDate, bs);
+                        setEmbargo(c, embargoDate, ItemImport.groupName, bs);
                     }              
                 }
             }
@@ -1907,38 +1947,57 @@ public class ItemImport
      * Sets the embargo date on a bitstream
      * @param c
      * @param embargoDate
+     * @param grpName group name specified if embargo applies to a specific group
      * @param bs
      * 
      */
-    private void setEmbargo(Context c, Date embargoDate, Bitstream bs)
+    public static void setEmbargo(Context c, Date embargoDate, String groupName, DSpaceObject dspaceobj)
             throws SQLException, AuthorizeException
     {
         if (embargoDate != null)
         {
             if (!isTest)
             {
-                AuthorizeManager.authorizeAction(c, bs, Constants.READ);
+                AuthorizeManager.authorizeAction(c, dspaceobj, Constants.READ);
                 if (!AuthorizeManager.isAnIdenticalPolicyAlreadyInPlace(c,
-                        bs.getType(), bs.getID(), 0, Constants.READ, -1))
+                        dspaceobj.getType(), dspaceobj.getID(), 0, Constants.READ, -1))
                 {
                     ResourcePolicy rp = ResourcePolicy.create(c);
-                    rp.setResource(bs);
+                    System.out.println(c.toString());
+                    System.out.println("group name = "+groupName);
+                    System.out.println(dspaceobj.getID()+" "+dspaceobj.getName()+" "+dspaceobj.getType()+" "+embargoDate.toString());
+                    rp.setResource(dspaceobj);
                     rp.setAction(Constants.READ);
                     rp.setRpName("Embargo Policy");
                     rp.setRpType(ResourcePolicy.TYPE_CUSTOM);
-                    rp.setRpDescription("Document is embargoed until "
+                    if(dspaceobj instanceof Item)
+                    	rp.setRpDescription("Item is embargoed until "
                             + embargoDate.toString());
-                    Group policyGroup = Group.find(c, 0);
+                    else if(dspaceobj instanceof Bundle)
+                    	rp.setRpDescription("Bundle is embargoed until "
+                                + embargoDate.toString());
+                    else if(dspaceobj instanceof Bitstream)
+                    	rp.setRpDescription("Bitstream is embargoed until "
+                                + embargoDate.toString());
+                    Group policyGroup;
+                    if(groupName!=null) {
+                    	policyGroup = Group.findByName(c, groupName);
+                    	if(policyGroup==null)
+                    		throw new Error("Group name "+groupName+" does not exist");
+                    }
+                    else {
+                    	policyGroup = Group.find(c, 0);
+                    }
                     rp.setGroup(policyGroup);
                     rp.setStartDate(embargoDate);
                     
         			rp.update();
-                    bs.updateLastModified();
+                    dspaceobj.updateLastModified();
     			}    			
             }
             else
             {
-                System.out
+            	System.out
                         .println("Call the createOrModifyPolicy of AuthorizeManager class to set embargo resource policy on the given bitsream");
         	}
     	}    	
