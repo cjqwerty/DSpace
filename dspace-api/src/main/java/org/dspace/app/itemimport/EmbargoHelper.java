@@ -1,8 +1,9 @@
 package org.dspace.app.itemimport;
 
 import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.util.Date;
+
+import org.apache.commons.lang3.time.DateUtils;
 
 /**
  * Contains utility functions to help parse the content file for embargos. Was
@@ -53,6 +54,7 @@ public class EmbargoHelper
 
     /**
      * @return The date to embargo until
+     * @throws ParseException
      */
     public Date getEmbargoDate() throws ParseException
     {
@@ -64,18 +66,23 @@ public class EmbargoHelper
                     eEndIndex).trim();
         }
         
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-
-        return sdf.parse(embargoDate);
+        return DateUtils.parseDate(embargoDate, new String[] { "yyyy-MM-dd",
+                "yyyy-MM", "yyyy" });
     }
 
     /**
      * Checks if the current line contains an embargo
      * 
      * @return True if the current line contains an embargo, false otherwise
+     * @throws ParseException
      */
-    public boolean checkForEmbargo()
+    public boolean checkForEmbargo() throws ParseException
     {
+        if (line.contains(" embargo:"))
+        {
+            throw new ParseException("Contents file must be tab delimited",
+                    line.indexOf(" embargo"));
+        }
         eMarkerIndex = line.indexOf(embargoMarker);
         eEndIndex = 0;
 

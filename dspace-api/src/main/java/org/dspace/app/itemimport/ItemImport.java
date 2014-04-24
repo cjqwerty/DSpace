@@ -36,6 +36,7 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.PosixParser;
 import org.apache.commons.lang.RandomStringUtils;
 import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.time.DateUtils;
 import org.apache.log4j.Logger;
 import org.apache.xpath.XPathAPI;
 import org.dspace.app.itemexport.ItemExportException;
@@ -168,7 +169,8 @@ public class ItemImport
                     "resume a failed import (add only)");
             options.addOption("q", "quiet", false, "don't display metadata");
             options.addOption("h", "help", false, "help");
-            options.addOption("g","embargo group name",false,"applies item embargo against specified group name");
+            options.addOption("g", "embargo group name", false,
+                    "applies item embargo against specified group name");
 
             CommandLine line = parser.parse(options, argv);
 
@@ -193,7 +195,6 @@ public class ItemImport
                         .println("deleting items:  ItemImport -d -e eperson -m mapfile");
                 System.out
                         .println("If multiple collections are specified, the first collection will be the one that owns the item.");
-                System.out.println("AAAAAA");
 
                 System.exit(0);
             }
@@ -275,14 +276,16 @@ public class ItemImport
                 isQuiet = true;
             }
             
-            if(line.hasOption('g')) // group name
+            if (line.hasOption('g'))
             {
-            	groupName = line.getOptionValue('g');
-            	groupName = groupName.trim();
-            	if(groupName==null || groupName.isEmpty()) {
-            		System.out.println("Error : Cannot resolve specified group name");
-            		System.exit(1);
-            	}
+                groupName = line.getOptionValue('g');
+                if (groupName == null || groupName.isEmpty())
+                {
+                    System.out
+                            .println("Error - cannot resolve specified group name");
+                    System.out.println(" (run with -h flag for details)");
+                    System.exit(1);
+                }
             }
 
             boolean zip = false;
@@ -998,31 +1001,40 @@ public class ItemImport
         }
         
         // Set embargo for the current item
-        if(!isTest) {
-        	File itemEmbargoDateFile = new File(path + File.separatorChar + itemname + File.separatorChar + "embargo_date.txt");
-        	if(itemEmbargoDateFile.exists()) {
-        		BufferedReader br = new BufferedReader(new FileReader(itemEmbargoDateFile));
-        		SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-        		String temp;
-        		Date itemEmbargoDate = null;
-        		while((temp = br.readLine())!=null) {
-        			temp = temp.trim();
-        			if(!temp.isEmpty()) {
-        				itemEmbargoDate = sdf.parse(temp);
-        				break;
-        			}
-        		}
-        		br.close();
-        		if(itemEmbargoDate!=null)
-        			setEmbargo(c, itemEmbargoDate, groupName, myitem);
-        		else {
-        			System.out.println("Error : Item embargo date given is not valid");
-        			System.exit(1);
-        		}
-        	}        	
+        if (!isTest) // this check is probably unnecessary
+        {
+            File itemEmbargoDateFile = new File(path + File.separatorChar
+                    + itemname + File.separatorChar + "embargo_date.txt");
+            if (itemEmbargoDateFile.exists())
+            {
+                BufferedReader br = new BufferedReader(new FileReader(
+                        itemEmbargoDateFile));
+                String temp;
+                Date itemEmbargoDate = null;
+                while ((temp = br.readLine()) != null)
+                {
+                    temp = temp.trim();
+                    if (!temp.isEmpty())
+                    {
+                        itemEmbargoDate = DateUtils
+                                .parseDate(temp, new String[] { "yyyy-MM-dd",
+                                        "yyyy-MM", "yyyy" });
+                        break;
+                    }
+                }
+                br.close();
+                if (itemEmbargoDate != null)
+                    setEmbargo(c, itemEmbargoDate, groupName, myitem);
+                else
+                {
+                    System.out
+                            .println("Error : Item embargo date given is not valid");
+                    System.exit(1);
+                }
+            }
         }
         else
-        	System.out.println("Call set embargo method on current item");
+            System.out.println("Call set embargo method on current item");
 
         c.commit();
 
@@ -1474,7 +1486,14 @@ public class ItemImport
                         // replace with code similar to permission/descriptions
                         // parsing
                         EmbargoHelper embargoHelper = new EmbargoHelper(line);
-                        embargoExists = embargoHelper.checkForEmbargo();
+                        try
+                        {
+                            embargoExists = embargoHelper.checkForEmbargo();
+                        }
+                        catch (ParseException e)
+                        {
+                            e.printStackTrace();
+                        }
                         int eMarkerIndex = embargoHelper.getEMarkerIndex();
                         int eEndIndex = embargoHelper.getEEndIndex();
 
@@ -1764,7 +1783,14 @@ public class ItemImport
             // TODO: remove this for pull request to main branch
             // replace with code similar to permission/descriptions parsing
             EmbargoHelper embargoHelper = new EmbargoHelper(line);
-            embargoExists = embargoHelper.checkForEmbargo();
+            try
+            {
+                embargoExists = embargoHelper.checkForEmbargo();
+            }
+            catch (ParseException e1)
+            {
+                e1.printStackTrace();
+            }
 
             int bsEndIndex = line.indexOf("\t");
             String bitstreamName = line.substring(0, bsEndIndex);
@@ -1878,8 +1904,7 @@ public class ItemImport
                 
                 if (embargoExists)
                 {
-                	System.out.println("@@@@@@ Using EmbargoHelper");
-                    System.out.println("@@@@@@ Embargo this item until:");
+                    System.out.print("Embargo this item until: ");
 
                     Date embargoDate = null;
 
@@ -1894,7 +1919,7 @@ public class ItemImport
                     
                     if (embargoDate != null)
                     {
-                    	System.out.println("@@@@@@ " + embargoDate.toString());
+                        System.out.println(embargoDate.toString());
                         setEmbargo(c, embargoDate, ItemImport.groupName, bs);
                     }              
                 }
@@ -1960,33 +1985,39 @@ public class ItemImport
             {
                 AuthorizeManager.authorizeAction(c, dspaceobj, Constants.READ);
                 if (!AuthorizeManager.isAnIdenticalPolicyAlreadyInPlace(c,
-                        dspaceobj.getType(), dspaceobj.getID(), 0, Constants.READ, -1))
+                        dspaceobj.getType(), dspaceobj.getID(), 0,
+                        Constants.READ, -1))
                 {
                     ResourcePolicy rp = ResourcePolicy.create(c);
                     System.out.println(c.toString());
-                    System.out.println("group name = "+groupName);
-                    System.out.println(dspaceobj.getID()+" "+dspaceobj.getName()+" "+dspaceobj.getType()+" "+embargoDate.toString());
+                    System.out.println("group name = " + groupName);
+                    System.out.println(dspaceobj.getID() + " "
+                            + dspaceobj.getName() + " " + dspaceobj.getType()
+                            + " " + embargoDate.toString());
                     rp.setResource(dspaceobj);
                     rp.setAction(Constants.READ);
                     rp.setRpName("Embargo Policy");
                     rp.setRpType(ResourcePolicy.TYPE_CUSTOM);
-                    if(dspaceobj instanceof Item)
-                    	rp.setRpDescription("Item is embargoed until "
-                            + embargoDate.toString());
-                    else if(dspaceobj instanceof Bundle)
-                    	rp.setRpDescription("Bundle is embargoed until "
+                    if (dspaceobj instanceof Item)
+                        rp.setRpDescription("Item is embargoed until "
                                 + embargoDate.toString());
-                    else if(dspaceobj instanceof Bitstream)
-                    	rp.setRpDescription("Bitstream is embargoed until "
+                    else if (dspaceobj instanceof Bundle)
+                        rp.setRpDescription("Bundle is embargoed until "
+                                + embargoDate.toString());
+                    else if (dspaceobj instanceof Bitstream)
+                        rp.setRpDescription("Bitstream is embargoed until "
                                 + embargoDate.toString());
                     Group policyGroup;
-                    if(groupName!=null) {
-                    	policyGroup = Group.findByName(c, groupName);
-                    	if(policyGroup==null)
-                    		throw new Error("Group name "+groupName+" does not exist");
+                    if (groupName != null)
+                    {
+                        policyGroup = Group.findByName(c, groupName);
+                        if (policyGroup == null)
+                            throw new Error("Group name " + groupName
+                                    + " does not exist");
                     }
-                    else {
-                    	policyGroup = Group.find(c, 0);
+                    else
+                    {
+                        policyGroup = Group.find(c, 0);
                     }
                     rp.setGroup(policyGroup);
                     rp.setStartDate(embargoDate);
