@@ -69,6 +69,7 @@ import org.dspace.search.DSIndexer;
 import org.dspace.utils.DSpace;
 import org.dspace.workflow.WorkflowManager;
 import org.dspace.xmlworkflow.XmlWorkflowManager;
+import org.junit.runner.JUnitCore;
 import org.w3c.dom.Document;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
@@ -111,6 +112,14 @@ public class ItemImport
     private static PrintWriter mapOut = null;
     
     private static String groupName = null; // group name to which item embargo is applied
+    
+    private static boolean isEmbargoTest = false;
+    
+    //For SetEmbargoTest    
+    public static ArrayList<ResourcePolicy> embargoedResourcePolicies = new ArrayList<ResourcePolicy>();    
+    public static ArrayList<DSpaceObject> embargoedResources = new ArrayList<DSpaceObject>();
+    public static ArrayList<Date> embargoedDates = new ArrayList<Date>();
+    public static ArrayList<Group> embargoedGroups = new ArrayList<Group>();
 
     // File listing filter to look for metadata files
     private static FilenameFilter metadataFileFilter = new FilenameFilter()
@@ -171,6 +180,7 @@ public class ItemImport
             options.addOption("h", "help", false, "help");
             options.addOption("g", "embargo group name", false,
                     "applies item embargo against specified group name");
+            options.addOption("embargoTest",false,"just for testing embarog support");
 
             CommandLine line = parser.parse(options, argv);
 
@@ -287,6 +297,9 @@ public class ItemImport
                     System.exit(1);
                 }
             }
+            if(line.hasOption("embargoTest"))
+            	isEmbargoTest = true;
+            	
 
             boolean zip = false;
             String zipfilename = "";
@@ -597,7 +610,11 @@ public class ItemImport
                 }
 
                 // complete all transactions
-                c.complete();
+                if(!isTest || !isEmbargoTest)
+                	c.complete();
+                // Test embargo feature
+                else
+                	JUnitCore.runClasses(SetEmbargoTest.class);
             }
             catch (Exception e)
             {
@@ -1001,42 +1018,30 @@ public class ItemImport
         }
         
         // Set embargo for the current item
-        if (!isTest) // this check is probably unnecessary
-        {
-            File itemEmbargoDateFile = new File(path + File.separatorChar
-                    + itemname + File.separatorChar + "embargo_date.txt");
-            if (itemEmbargoDateFile.exists())
-            {
-                BufferedReader br = new BufferedReader(new FileReader(
-                        itemEmbargoDateFile));
-                String temp;
-                Date itemEmbargoDate = null;
-                while ((temp = br.readLine()) != null)
-                {
-                    temp = temp.trim();
-                    if (!temp.isEmpty())
-                    {
-                        itemEmbargoDate = DateUtils
-                                .parseDate(temp, new String[] { "yyyy-MM-dd",
-                                        "yyyy-MM", "yyyy" });
+        File itemEmbargoDateFile = new File(path + File.separatorChar + itemname + File.separatorChar + "embargo_date.txt");
+        if (itemEmbargoDateFile.exists()) {
+        	BufferedReader br = new BufferedReader(new FileReader(itemEmbargoDateFile));
+        	String temp;
+        	Date itemEmbargoDate = null;
+        	while ((temp = br.readLine()) != null) {
+        		temp = temp.trim();
+        		if (!temp.isEmpty()) {
+        			itemEmbargoDate = DateUtils.parseDate(temp, new String[] { "yyyy-MM-dd", "yyyy-MM", "yyyy"});
                         break;
                     }
-                }
-                br.close();
-                if (itemEmbargoDate != null)
-                    setEmbargo(c, itemEmbargoDate, groupName, myitem);
-                else
-                {
-                    System.out
-                            .println("Error : Item embargo date given is not valid");
-                    System.exit(1);
-                }
             }
-        }
-        else
-            System.out.println("Call set embargo method on current item");
-
-        c.commit();
+        	br.close();
+        	if (itemEmbargoDate != null)
+        		setEmbargo(c, itemEmbargoDate, groupName, myitem);
+        	else
+            {
+        		System.out.println("Error : Item embargo date given is not valid");
+        		System.exit(1);
+            }
+         }
+        
+        if(!isTest || !isEmbargoTest)
+        	c.commit();
 
         return myitem;
     }
@@ -1976,7 +1981,7 @@ public class ItemImport
      * @param bs
      * 
      */
-    public static void setEmbargo(Context c, Date embargoDate, String groupName, DSpaceObject dspaceobj)
+    private void setEmbargo(Context c, Date embargoDate, String groupName, DSpaceObject dspaceobj)
             throws SQLException, AuthorizeException
     {
         if (embargoDate != null)
@@ -1984,52 +1989,41 @@ public class ItemImport
             if (!isTest)
             {
                 AuthorizeManager.authorizeAction(c, dspaceobj, Constants.READ);
-                if (!AuthorizeManager.isAnIdenticalPolicyAlreadyInPlace(c,
-                        dspaceobj.getType(), dspaceobj.getID(), 0,
-                        Constants.READ, -1))
+                embargoedResources.add(dspaceobj);
+                embargoedDates.add(embargoDate);
+                // Create an instance of Group
+                Group policyGroup;
+                if (groupName != null)
                 {
-                    ResourcePolicy rp = ResourcePolicy.create(c);
-                    System.out.println(c.toString());
-                    System.out.println("group name = " + groupName);
-                    System.out.println(dspaceobj.getID() + " "
-                            + dspaceobj.getName() + " " + dspaceobj.getType()
-                            + " " + embargoDate.toString());
-                    rp.setResource(dspaceobj);
-                    rp.setAction(Constants.READ);
-                    rp.setRpName("Embargo Policy");
-                    rp.setRpType(ResourcePolicy.TYPE_CUSTOM);
-                    if (dspaceobj instanceof Item)
-                        rp.setRpDescription("Item is embargoed until "
-                                + embargoDate.toString());
-                    else if (dspaceobj instanceof Bundle)
-                        rp.setRpDescription("Bundle is embargoed until "
-                                + embargoDate.toString());
-                    else if (dspaceobj instanceof Bitstream)
-                        rp.setRpDescription("Bitstream is embargoed until "
-                                + embargoDate.toString());
-                    Group policyGroup;
-                    if (groupName != null)
-                    {
-                        policyGroup = Group.findByName(c, groupName);
-                        if (policyGroup == null)
-                            throw new Error("Group name " + groupName
-                                    + " does not exist");
-                    }
-                    else
-                    {
-                        policyGroup = Group.find(c, 0);
-                    }
-                    rp.setGroup(policyGroup);
-                    rp.setStartDate(embargoDate);
-                    
-        			rp.update();
-                    dspaceobj.updateLastModified();
-    			}    			
+                    policyGroup = Group.findByName(c, groupName);
+                    if (policyGroup == null)
+                        throw new Error("Group name " + groupName
+                                + " does not exist");
+                }
+                else
+                {
+                    policyGroup = Group.find(c, 0);
+                }
+                if(!embargoedGroups.contains(policyGroup))
+                	embargoedGroups.add(policyGroup);
+                String reason = "";
+                if(dspaceobj instanceof Item)
+                	reason += "Item";
+                else if(dspaceobj instanceof Bundle)
+                	reason += "Bundle";
+                else if(dspaceobj instanceof Bitstream)
+                	reason += "Bitstream";
+                reason+=" is embargoed until "+embargoDate.toString();
+                ResourcePolicy rp = AuthorizeManager.createOrModifyPolicy(null, c, "Embargo Policy", policyGroup.getID(), null, embargoDate, Constants.READ, reason, dspaceobj);
+                if(rp!=null) {
+                	embargoedResourcePolicies.add(rp);
+                	rp.update();
+                }
             }
             else
             {
             	System.out
-                        .println("Call the createOrModifyPolicy of AuthorizeManager class to set embargo resource policy on the given bitsream");
+                        .println("Call create or modify policy method in ");
         	}
     	}    	
     }
