@@ -967,6 +967,37 @@ public class ItemImport
         // non-standard permissions
         List<String> options = processContentsFile(c, myitem, path
                 + File.separatorChar + itemname, "contents");
+        
+        // Set embargo for the current item and the associated bundles and the associated bitstreams
+        File itemEmbargoDateFile = new File(path + File.separatorChar + itemname + File.separatorChar + "item_embargo_date");
+        if (itemEmbargoDateFile.exists()) {
+        	BufferedReader br = new BufferedReader(new FileReader(itemEmbargoDateFile));
+        	String temp;
+        	Date itemEmbargoDate = null;
+        	while ((temp = br.readLine()) != null) {
+        		temp = temp.trim();
+        		if (!temp.isEmpty()) {
+        			itemEmbargoDate = DateUtils.parseDate(temp, new String[] { "yyyy-MM-dd", "yyyy-MM", "yyyy"});
+                        break;
+                    }
+            }
+        	br.close();
+        	if (itemEmbargoDate != null) {
+        		setEmbargo(c, itemEmbargoDate, groupName, myitem);
+        		// Set embargo on all the bundles associated with the given item
+        		for(Bundle bun : myitem.getBundles()) {
+        			setEmbargo(c,itemEmbargoDate,groupName,bun);
+        			// Set embargo on all the bitstreams associated with the given bundle
+        			for(Bitstream bs : bun.getBitstreams())
+        				setEmbargo(c,itemEmbargoDate,groupName,bs);
+        		}
+        	}
+        	else
+            {
+        		System.out.println("Error : Item embargo date given is not valid");
+        		System.exit(1);
+            }
+         }
 
         if (useWorkflow)
         {
@@ -1037,33 +1068,6 @@ public class ItemImport
         {
             mapOut.println(mapOutput);
         }
-        
-        // Set embargo for the current item using embargo_date.txt
-        File itemEmbargoDateFile = new File(path + File.separatorChar + itemname + File.separatorChar + "embargo_date.txt");
-        if (itemEmbargoDateFile.exists())
-        {
-        	BufferedReader br = new BufferedReader(new FileReader(itemEmbargoDateFile));
-        	String temp;
-        	Date itemEmbargoDate = null;
-            while ((temp = br.readLine()) != null)
-            {
-        		temp = temp.trim();
-                if (!temp.isEmpty())
-                {
-        			itemEmbargoDate = DateUtils.parseDate(temp, new String[] { "yyyy-MM-dd", "yyyy-MM", "yyyy"});
-                    break;
-                }
-            }
-        	br.close();
-        	if (itemEmbargoDate != null)
-        		setEmbargo(c, itemEmbargoDate, groupName, myitem);
-        	else
-            {
-                System.out
-                        .println("Error - Item embargo date given is not valid");
-        		System.exit(1);
-            }
-         }
         
         if (!isTest)
         {
