@@ -15,13 +15,34 @@ import gr.ekt.bte.dataloader.FileDataLoader;
 import gr.ekt.bteio.generators.DSpaceOutputGenerator;
 import gr.ekt.bteio.loaders.OAIPMHDataLoader;
 
-import java.io.*;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.FilenameFilter;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.PrintWriter;
 import java.sql.SQLException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.*;
-import java.util.zip.ZipFile;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.StringTokenizer;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 import javax.mail.MessagingException;
 import javax.xml.parsers.DocumentBuilder;
@@ -39,7 +60,6 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang3.time.DateUtils;
 import org.apache.log4j.Logger;
 import org.apache.xpath.XPathAPI;
-import org.dspace.app.itemexport.ItemExportException;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.authorize.AuthorizeManager;
 import org.dspace.authorize.ResourcePolicy;
@@ -47,7 +67,6 @@ import org.dspace.content.Bitstream;
 import org.dspace.content.BitstreamFormat;
 import org.dspace.content.Bundle;
 import org.dspace.content.Collection;
-import org.dspace.content.Community;
 import org.dspace.content.DSpaceObject;
 import org.dspace.content.FormatIdentifier;
 import org.dspace.content.InstallItem;
@@ -69,7 +88,7 @@ import org.dspace.search.DSIndexer;
 import org.dspace.utils.DSpace;
 import org.dspace.workflow.WorkflowManager;
 import org.dspace.xmlworkflow.XmlWorkflowManager;
-import org.junit.runner.JUnitCore;
+//import org.junit.runner.JUnitCore;
 import org.w3c.dom.Document;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
@@ -113,12 +132,13 @@ public class ItemImport
     
     private static String groupName = null; // group name to which item embargo is applied
     
-    private static boolean isEmbargoTest = false;
-    
     //For SetEmbargoTest    
-    public static ArrayList<ResourcePolicy> embargoedResourcePolicies = new ArrayList<ResourcePolicy>();    
+    public static ArrayList<ResourcePolicy> embargoedResourcePolicies = new ArrayList<ResourcePolicy>();
+
     public static ArrayList<DSpaceObject> embargoedResources = new ArrayList<DSpaceObject>();
+
     public static ArrayList<Date> embargoedDates = new ArrayList<Date>();
+
     public static ArrayList<Group> embargoedGroups = new ArrayList<Group>();
 
     // File listing filter to look for metadata files
@@ -178,9 +198,8 @@ public class ItemImport
                     "resume a failed import (add only)");
             options.addOption("q", "quiet", false, "don't display metadata");
             options.addOption("h", "help", false, "help");
-            options.addOption("g", "embargo group name", false,
+            options.addOption("g", "embargo group name", true,
                     "applies item embargo against specified group name");
-            options.addOption("embargoTest",false,"just for testing embarog support");
 
             CommandLine line = parser.parse(options, argv);
 
@@ -297,9 +316,6 @@ public class ItemImport
                     System.exit(1);
                 }
             }
-            if(line.hasOption("embargoTest"))
-            	isEmbargoTest = true;
-            	
 
             boolean zip = false;
             String zipfilename = "";
@@ -588,6 +604,7 @@ public class ItemImport
                             out.close();
                         }
                     }
+                    zf.close();
                 }
 
                 c.turnOffAuthorisationSystem();
@@ -610,11 +627,15 @@ public class ItemImport
                 }
 
                 // complete all transactions
-                if(!isTest || !isEmbargoTest)
+                if (!isTest)
+                {
                 	c.complete();
-                // Test embargo feature
+                }
                 else
-                	JUnitCore.runClasses(SetEmbargoTest.class);
+                {
+                    // Test embargo feature
+                    // JUnitCore.runClasses(SetEmbargoTest.class);
+                }
             }
             catch (Exception e)
             {
@@ -1017,31 +1038,37 @@ public class ItemImport
             mapOut.println(mapOutput);
         }
         
-        // Set embargo for the current item
+        // Set embargo for the current item using embargo_date.txt
         File itemEmbargoDateFile = new File(path + File.separatorChar + itemname + File.separatorChar + "embargo_date.txt");
-        if (itemEmbargoDateFile.exists()) {
+        if (itemEmbargoDateFile.exists())
+        {
         	BufferedReader br = new BufferedReader(new FileReader(itemEmbargoDateFile));
         	String temp;
         	Date itemEmbargoDate = null;
-        	while ((temp = br.readLine()) != null) {
+            while ((temp = br.readLine()) != null)
+            {
         		temp = temp.trim();
-        		if (!temp.isEmpty()) {
+                if (!temp.isEmpty())
+                {
         			itemEmbargoDate = DateUtils.parseDate(temp, new String[] { "yyyy-MM-dd", "yyyy-MM", "yyyy"});
-                        break;
-                    }
+                    break;
+                }
             }
         	br.close();
         	if (itemEmbargoDate != null)
         		setEmbargo(c, itemEmbargoDate, groupName, myitem);
         	else
             {
-        		System.out.println("Error : Item embargo date given is not valid");
+                System.out
+                        .println("Error - Item embargo date given is not valid");
         		System.exit(1);
             }
          }
         
-        if(!isTest || !isEmbargoTest)
+        if (!isTest)
+        {
         	c.commit();
+        }
 
         return myitem;
     }
@@ -1487,9 +1514,7 @@ public class ItemImport
                             descriptionExists = true;
                         }
                         
-                        // TODO: remove this for pull request to main branch
-                        // replace with code similar to permission/descriptions
-                        // parsing
+                        // look for embargo
                         EmbargoHelper embargoHelper = new EmbargoHelper(line);
                         try
                         {
@@ -1785,8 +1810,7 @@ public class ItemImport
                 descriptionExists = true;
             }
             
-            // TODO: remove this for pull request to main branch
-            // replace with code similar to permission/descriptions parsing
+            // look for embargo
             EmbargoHelper embargoHelper = new EmbargoHelper(line);
             try
             {
@@ -1906,27 +1930,27 @@ public class ItemImport
                     bs.setDescription(thisDescription);
                     bs.update();
                 }
-                
-                if (embargoExists)
+            }
+
+            if (embargoExists)
+            {
+                System.out.print("Embargo this item until: ");
+
+                Date embargoDate = null;
+
+                try
                 {
-                    System.out.print("Embargo this item until: ");
+                    embargoDate = embargoHelper.getEmbargoDate();
+                }
+                catch (ParseException e)
+                {
+                    e.printStackTrace();
+                }
 
-                    Date embargoDate = null;
-
-                    try
-                    {
-                        embargoDate = embargoHelper.getEmbargoDate();
-                    }
-                    catch (ParseException e)
-                    {
-                        e.printStackTrace();
-                    }
-                    
-                    if (embargoDate != null)
-                    {
-                        System.out.println(embargoDate.toString());
-                        setEmbargo(c, embargoDate, ItemImport.groupName, bs);
-                    }              
+                if (embargoDate != null)
+                {
+                    System.out.println(embargoDate.toString());
+                    setEmbargo(c, embargoDate, ItemImport.groupName, bs);
                 }
             }
         }
@@ -1989,42 +2013,41 @@ public class ItemImport
             if (!isTest)
             {
                 AuthorizeManager.authorizeAction(c, dspaceobj, Constants.READ);
-                embargoedResources.add(dspaceobj);
-                embargoedDates.add(embargoDate);
-                // Create an instance of Group
-                Group policyGroup;
-                if (groupName != null)
-                {
-                    policyGroup = Group.findByName(c, groupName);
-                    if (policyGroup == null)
-                        throw new Error("Group name " + groupName
-                                + " does not exist");
-                }
-                else
-                {
-                    policyGroup = Group.find(c, 0);
-                }
-                if(!embargoedGroups.contains(policyGroup))
-                	embargoedGroups.add(policyGroup);
-                String reason = "";
-                if(dspaceobj instanceof Item)
-                	reason += "Item";
-                else if(dspaceobj instanceof Bundle)
-                	reason += "Bundle";
-                else if(dspaceobj instanceof Bitstream)
-                	reason += "Bitstream";
-                reason+=" is embargoed until "+embargoDate.toString();
-                ResourcePolicy rp = AuthorizeManager.createOrModifyPolicy(null, c, "Embargo Policy", policyGroup.getID(), null, embargoDate, Constants.READ, reason, dspaceobj);
-                if(rp!=null) {
-                	embargoedResourcePolicies.add(rp);
-                	rp.update();
-                }
+            }
+            embargoedResources.add(dspaceobj);
+            embargoedDates.add(embargoDate);
+            // Create an instance of Group
+            Group policyGroup;
+            if (groupName != null)
+            {
+                policyGroup = Group.findByName(c, groupName);
+                if (policyGroup == null)
+                    throw new Error("Group name " + groupName
+                            + " does not exist");
             }
             else
             {
-            	System.out
-                        .println("Call create or modify policy method in ");
-        	}
+                policyGroup = Group.find(c, 0);
+            }
+            if (!embargoedGroups.contains(policyGroup))
+                embargoedGroups.add(policyGroup);
+            String reason = "";
+            if (dspaceobj instanceof Item)
+                reason += "Item";
+            else if (dspaceobj instanceof Bundle)
+                reason += "Bundle";
+            else if (dspaceobj instanceof Bitstream)
+                reason += "Bitstream";
+            reason += " is embargoed until " + embargoDate.toString();
+
+            if (!isTest)
+            {
+                ResourcePolicy rp = AuthorizeManager.createOrModifyPolicy(null,
+                        c, "Embargo Policy", policyGroup.getID(), null,
+                        embargoDate, Constants.READ, reason, dspaceobj);
+                embargoedResourcePolicies.add(rp);
+                rp.update();
+            }
     	}    	
     }
 

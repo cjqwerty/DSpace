@@ -125,4 +125,18 @@ public class EmbargoHelperTest
         helper.getEmbargoDate();
     }
 
+    @Test(expected = ParseException.class)
+    public void testGetEmbargoDateWrongFormatSlashesMMYY()
+            throws ParseException
+    {
+        String line = "Liu_Z_D_2012.pdf\tbundle:ORIGINAL\tembargo:01/14";
+        EmbargoHelper helper = new EmbargoHelper(line);
+
+        // checkForEmbargo() must be called first to
+        // get indicies to use
+        helper.checkForEmbargo();
+
+        helper.getEmbargoDate();
+    }
+
 }
